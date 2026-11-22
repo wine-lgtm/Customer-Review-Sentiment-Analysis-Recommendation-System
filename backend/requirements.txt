@@ -1,0 +1,16 @@
+flask
+flask-cors
+python-dotenv
+pandas
+scikit-learn
+nltk
+numpy
+gunicorn
+pymongo
+flask-jwt-extended
+bcrypt
+python-jose[cryptography]
+openpyxl
+reportlab
+flasgger
+textblob

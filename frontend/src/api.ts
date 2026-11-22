@@ -1,0 +1,205 @@
+const API_BASE = "/api";
+
+function getToken(): string | null {
+  try {
+    const saved = localStorage.getItem("auth");
+    if (saved) return JSON.parse(saved).token;
+  } catch { /* ignore */ }
+  return null;
+}
+
+async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (options?.headers) {
+    Object.assign(headers, options.headers);
+  }
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || "API request failed");
+  }
+  return res.json();
+}
+
+export interface Problem {
+  category: string;
+  category_key: string;
+  frequency: number;
+  severity: string;
+  percentage: number;
+  examples: string[];
+  is_custom?: boolean;
+}
+
+export interface Recommendation {
+  title: string;
+  priority: string;
+  problem_category: string;
+  problem_frequency: number;
+  problem_percentage: number;
+  suggestions: string[];
+  impact: string;
+  examples: string[];
+}
+
+export interface ResultsData {
+  analysis: {
+    id: string;
+    filename: string;
+    text_column: string;
+    rating_column: string | null;
+    total_reviews: number;
+    status: string;
+    created_at: string;
+  };
+  results: {
+    best_model: string;
+    best_accuracy: number;
+    active_model: string;
+    sentiment_distribution: {
+      positive: number;
+      negative: number;
+      neutral: number;
+      total: number;
+    };
+    problems: {
+      problems: Problem[];
+      total_negative: number;
+      top_complaint_words: { word: string; count: number }[];
+    };
+    recommendations: {
+      recommendations: Recommendation[];
+      summary: string;
+      overall_sentiment: string;
+      total_recommendations: number;
+    };
+    model_results: Record<string, { accuracy: number; classification_report: unknown }>;
+    spam_summary?: {
+      total_flagged: number;
+      total_reviews: number;
+      flagged_percentage: number;
+    };
+    cluster_summary?: unknown[];
+    model_runs?: Record<string, {
+      sentiment_distribution: { positive: number; negative: number; neutral: number; total: number };
+      problems: { problems: Problem[]; total_negative: number; top_complaint_words: { word: string; count: number }[] };
+      recommendations: { recommendations: Recommendation[]; summary: string; overall_sentiment: string; total_recommendations: number };
+      spam_summary: { total_flagged: number; total_reviews: number; flagged_percentage: number };
+      cluster_summary: unknown[];
+    }>;
+  };
+}
+
+export interface Prediction {
+  id: number;
+  analysis_id: string;
+  review_text: string;
+  sentiment: string;
+  spam_score: number;
+  spam_confidence?: string;
+  spam_reasons?: { signal: string; detail: string }[];
+  is_flagged: boolean;
+  cluster_id: number;
+  cluster_label: string;
+}
+
+export interface PredictionResponse {
+  predictions: Prediction[];
+  total: number;
+}
+
+export interface SpamSummary {
+  total_flagged: number;
+  total_reviews: number;
+  flagged_percentage: number;
+}
+
+export interface SpamData {
+  spam_summary: SpamSummary;
+  flagged_reviews: Prediction[];
+  clean_count: number;
+}
+
+export interface Analysis {
+  id: string;
+  filename: string;
+  text_column: string;
+  rating_column: string | null;
+  total_reviews: number | null;
+  status: string;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface ProgressData {
+  step: string;
+  percent: number;
+  status?: string;
+}
+
+export function getResults(analysisId: string, model?: string) {
+  const qs = model ? `?model=${model}` : "";
+  return apiFetch<ResultsData>(`/results/${analysisId}${qs}`);
+}
+
+export function getPredictions(
+  analysisId: string,
+  limit = 50,
+  offset = 0,
+  sentiment?: string,
+  search?: string,
+  model?: string,
+) {
+  const params = new URLSearchParams();
+  params.set("limit", String(limit));
+  params.set("offset", String(offset));
+  if (sentiment) params.set("sentiment", sentiment);
+  if (search) params.set("q", search);
+  if (model) params.set("model", model);
+  return apiFetch<PredictionResponse>(`/predictions/${analysisId}?${params}`);
+}
+
+export function getProgress(analysisId: string) {
+  return apiFetch<ProgressData>(`/progress/${analysisId}`);
+}
+
+export function listAnalyses() {
+  return apiFetch<Analysis[]>("/analyses");
+}
+
+export interface TrendPoint {
+  date: string;
+  positive: number;
+  negative: number;
+  neutral: number;
+  total: number;
+}
+
+export function getTrend(analysisId: string) {
+  return apiFetch<{ trend: TrendPoint[]; message: string | null }>(`/trend/${analysisId}`);
+}
+
+export interface WordFreq {
+  word: string;
+  total: number;
+  positive: number;
+  negative: number;
+  neutral: number;
+}
+
+export function getWordFrequency(analysisId: string, model?: string) {
+  const qs = model ? `?model=${model}` : "";
+  return apiFetch<{ words: WordFreq[] }>(`/word-frequency/${analysisId}${qs}`);
+}
+
+export function getAiSummary(analysisId: string, model?: string) {
+  const qs = model ? `?model=${model}` : "";
+  return apiFetch<{ summary: string }>(`/summary/${analysisId}${qs}`);
+}
+
+export function getSpamSummary(analysisId: string, model?: string) {
+  const qs = model ? `?model=${model}` : "";
+  return apiFetch<SpamData>(`/spam/${analysisId}${qs}`);
+}
